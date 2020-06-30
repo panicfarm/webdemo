@@ -20,7 +20,7 @@ async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> 
     // a friendly greeting ;)
     let res = task::spawn_blocking(move || {
         // do some compute-heavy work or call synchronous code
-        "return json from chaindata"
+        "TODO: return json from chaindata::db::edges() etc by calling it right here"
     })
     .await
     .unwrap();
