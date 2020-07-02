@@ -26,25 +26,28 @@ struct GraphReq {
 
 async fn serve_req(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     println!("Request {:?}", req);
-    //TODO req.body - parse JSON
-    let bytes = hyper::body::to_bytes(req.into_body()).await?;
-    let graph_req: GraphReq = serde_json::from_slice(&bytes).unwrap();
-    println!("{:?}", graph_req);
-    let res = task::spawn_blocking(move || {
-        // do some compute-heavy work or call synchronous code
-        //TODO JSON(chaindata::db::edges())
-        let db_path = "/home/alecm/clustering/lmdb.100000";
-        let dp = PathBuf::from(db_path);
-        let db = Db::new(&dp, 100_000_000_000, false).unwrap();
-        let db = Box::leak(Box::new(db));
-        let graph = db.create_graph_adapter().unwrap();
-        let (in_edges, out_edges) = graph.vx_edges(graph_req.vx).unwrap();
-        //"TODO: return json from chaindata::db::edges() etc by calling it right here"
-        serde_json::to_string(&in_edges).unwrap()
-    })
-    .await
-    .unwrap();
-    Ok(Response::new(Body::from(res)))
+    match req.uri().path() {
+        "/graph" => {
+            let bytes = hyper::body::to_bytes(req.into_body()).await?;
+            let graph_req: GraphReq = serde_json::from_slice(&bytes).unwrap();
+            println!("{:?}", graph_req);
+            let res = task::spawn_blocking(move || {
+                let db_path = "/home/alecm/clustering/lmdb.100000";
+                let dp = PathBuf::from(db_path);
+                let db = Db::new(&dp, 100_000_000_000, false).unwrap();
+                let db = Box::leak(Box::new(db));
+                let graph = db.create_graph_adapter().unwrap();
+                let (in_edges, out_edges) = graph.vx_edges(graph_req.vx).unwrap();
+                serde_json::to_string(&in_edges).unwrap()
+            })
+            .await
+            .unwrap();
+            Ok(Response::new(Body::from(res)))
+        }
+        _ => Ok(Response::new(Body::from(String::from_utf8_lossy(
+            include_bytes!("../files/index.html"),
+        )))),
+    }
 }
 
 async fn run_server(addr: SocketAddr) {
