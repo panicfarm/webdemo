@@ -1,26 +1,46 @@
 use {
+    chaindata::db::Db,
     hyper::{
+        server::conn::AddrStream,
         // Following functions are used by Hyper to handle a `Request`
         // and returning a `Response` in an asynchronous manner by using a Future
         service::{make_service_fn, service_fn},
         // Miscellaneous types from Hyper for working with HTTP.
         Body,
-        Client,
         Request,
         Response,
         Server,
-        Uri,
     },
+    serde::{Deserialize, Serialize},
+    std::fmt::Debug,
     std::net::SocketAddr,
+    std::path::PathBuf,
     tokio::task,
 };
 
-async fn serve_req(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    // Always return successfully with a response containing a body with
-    // a friendly greeting ;)
+#[derive(Serialize, Deserialize, Debug)]
+struct GraphReq {
+    vx: u32,
+    thr: u64,
+}
+
+async fn serve_req(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    println!("Request {:?}", req);
+    //TODO req.body - parse JSON
+    let bytes = hyper::body::to_bytes(req.into_body()).await?;
+    let graph_req: GraphReq = serde_json::from_slice(&bytes).unwrap();
+    println!("{:?}", graph_req);
     let res = task::spawn_blocking(move || {
         // do some compute-heavy work or call synchronous code
-        "TODO: return json from chaindata::db::edges() etc by calling it right here"
+        //TODO JSON(chaindata::db::edges())
+        let db_path = "/home/alecm/clustering/lmdb.100000";
+        let dp = PathBuf::from(db_path);
+        let db = Db::new(&dp, 100_000_000_000, false).unwrap();
+        let db = Box::leak(Box::new(db));
+        let graph = db.create_graph_adapter().unwrap();
+        let (in_edges, out_edges) = graph.vx_edges(graph_req.vx).unwrap();
+        //"TODO: return json from chaindata::db::edges() etc by calling it right here"
+        serde_json::to_string(&in_edges).unwrap()
     })
     .await
     .unwrap();
@@ -39,8 +59,9 @@ async fn run_server(addr: SocketAddr) {
         // type that implements the `Service` trait, and `service_fn`
         // converts a request-response function into a type that implements
         // the `Service` trait.
-        .serve(make_service_fn(|_| async {
-            Ok::<_, hyper::Error>(service_fn(serve_req))
+        .serve(make_service_fn(|socket: &AddrStream| {
+            println!("{}", socket.remote_addr());
+            async { Ok::<_, hyper::Error>(service_fn(serve_req)) }
         }));
 
     // Wait for the server to complete serving or exit with an error.
