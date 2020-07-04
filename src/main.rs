@@ -37,7 +37,8 @@ async fn serve_req(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 let db = Db::new(&dp, 100_000_000_000, false).unwrap();
                 let db = Box::leak(Box::new(db));
                 let graph = db.create_graph_adapter().unwrap();
-                let (in_edges, out_edges) = graph.vx_edges(graph_req.vx).unwrap();
+                let (mut in_edges, mut out_edges) = graph.vx_edges(graph_req.vx).unwrap();
+                in_edges.append(&mut out_edges);
                 serde_json::to_string(&in_edges).unwrap()
             })
             .await
