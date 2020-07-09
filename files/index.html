@@ -16,6 +16,23 @@
   </style>
   <script>
     //TODO make it a separate module
+
+    async function jsonData(url = '', data = {}) {
+      // Default options are marked with *
+      const response = await fetch(url, {
+        method: 'POST', // *GET, POST, PUT, DELETE, etc.
+        mode: 'same-origin', // no-cors, *cors, same-origin
+        cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+        credentials: 'same-origin', // include, *same-origin, omit
+        headers: {
+          'Content-Type': 'application/json'
+          // 'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: JSON.stringify(data) // body data type must match "Content-Type" header
+      });
+      return response.json(); // parses JSON response into native JavaScript objects
+    }
+
     function to_cy_edge(api_edge, clicked_vx) {
       //TODO webworker and/or WASM
       var cy_edge = new Object();
@@ -61,6 +78,47 @@
       )
     }
 
+    function on_graph_click(evt) {
+      var el_type;
+      if (evt.target['elements']) {
+        el_type = 'g';
+        //TODO clicked on graph bg
+        console.log(`TODO reset the graph?`);
+      } else {
+        console.info( `graph click ${evt.target.id()}` );
+        var target_el_id = evt.target.id();
+        el_type = target_el_id.charAt(0);
+        var target_id = parseInt(target_el_id.slice(1));
+        switch (el_type) {
+          case 'n':
+            on_vx_click(target_id);
+            break;
+          case 'e':
+            on_edge_click(target_id);
+            break;
+        }
+      }
+    }
+
+    function on_vx_click(clicked_vx) {
+      jsonData('/graph', { "vx": clicked_vx,"thr":123 })
+        .then(edges => {
+          console.info("from server", edges); // JSON data parsed by `data.json()` call
+          added_eles = {'nodes': [], 'edges': []};
+          on_new_edges(edges, clicked_vx);
+          console.info("adding to graph", added_eles);
+          cy.add(added_eles);
+          //TODO run layout on collection of new elements
+          var new_eles = cy.filter(`[clicked=${clicked_vx}]`);
+          var lt = new_eles.layout({ name: 'circle' });
+          lt.run();
+          cy.fit();
+        });
+    }
+    function on_edge_click(edge_id) {
+      console.log("TODO impl edge click");
+    }
+
     function start(n) {
       var node = to_cy_node(n);
       cy.add(node);
@@ -79,21 +137,6 @@
 <div id="cy"></div>
 <!-- Load application code at the end to ensure DOM is loaded -->
 <script>
-  async function jsonData(url = '', data = {}) {
-    // Default options are marked with *
-    const response = await fetch(url, {
-      method: 'POST', // *GET, POST, PUT, DELETE, etc.
-      mode: 'same-origin', // no-cors, *cors, same-origin
-      cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
-      credentials: 'same-origin', // include, *same-origin, omit
-      headers: {
-        'Content-Type': 'application/json'
-        // 'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: JSON.stringify(data) // body data type must match "Content-Type" header
-    });
-    return response.json(); // parses JSON response into native JavaScript objects
-  }
 
   var displayed_nodes_set = new Set();
   var displayed_edges_set = new Set();
@@ -142,23 +185,7 @@
 
     elements: to_cy_node(n0)  
   });
-  cy.on('click', function(evt){
-    console.info( 'node click ' + evt.target.id() );
-    var clicked_vx = parseInt(evt.target.id().slice(1));
-    jsonData('/graph', { "vx": clicked_vx,"thr":123 })
-      .then(edges => {
-        console.info("from server", edges); // JSON data parsed by `data.json()` call
-        added_eles = {'nodes': [], 'edges': []};
-        on_new_edges(edges, clicked_vx);
-        console.info("adding to graph", added_eles);
-        cy.add(added_eles);
-        //TODO run layout on collection of new elements
-        var new_eles = cy.filter('[clicked='+clicked_vx+']');
-        var lt = new_eles.layout({ name: 'circle' });
-        lt.run();
-        cy.fit();
-      });
-  });
+  cy.on('click', on_graph_click);
 
   cy.on('mouseover', function(evt){
     if (evt.target.hasOwnProperty('id')) {
