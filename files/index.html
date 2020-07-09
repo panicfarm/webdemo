@@ -16,7 +16,7 @@
   </style>
   <script>
     //TODO make it a separate module
-    function to_cy_edge(api_edge) {
+    function to_cy_edge(api_edge, clicked_vx) {
       //TODO webworker and/or WASM
       var cy_edge = new Object();
       cy_edge.group = "edges";
@@ -24,35 +24,37 @@
       edge_data.id = "e"+api_edge[0];
       edge_data.source = "n"+api_edge[1].orig_vx;
       edge_data.target = "n"+api_edge[1].dest_vx;
+      edge_data.clicked = clicked_vx;
       cy_edge.data = edge_data;
       return cy_edge;
     }
 
-    function to_cy_node(id) {
+    function to_cy_node(id, clicked_vx) {
       var cy_node = new Object();
       cy_node.group = "nodes";
       var node_data = new Object();
       node_data.id = "n"+id;
+      node_data.clicked = clicked_vx;
       cy_node.data = node_data;
       return cy_node;
     }
 
 
-    function on_new_edges(api_edges) {
+    function on_new_edges(api_edges, clicked_vx) {
       api_edges.forEach( api_edge => {
         if (!displayed_nodes_set.has(api_edge[1].orig_vx)) {
           //add node
-          added_nodes_arr.push(to_cy_node(api_edge[1].orig_vx));
+          added_eles['nodes'].push(to_cy_node(api_edge[1].orig_vx, clicked_vx));
           displayed_nodes_set.add(api_edge[1].orig_vx);
         }
         if (!displayed_nodes_set.has(api_edge[1].dest_vx)) { 
           //add node
-          added_nodes_arr.push(to_cy_node(api_edge[1].dest_vx));
+          added_eles['nodes'].push(to_cy_node(api_edge[1].dest_vx, clicked_vx));
           displayed_nodes_set.add(api_edge[1].dest_vx);
         }
         if (!displayed_edges_set.has(api_edge[0])) {
           //add edge
-          added_edges_arr.push(to_cy_edge(api_edge));
+          added_eles['edges'].push(to_cy_edge(api_edge, clicked_vx));
           displayed_edges_set.add(api_edge[0]);
         }
       }
@@ -95,9 +97,8 @@
 
   var displayed_nodes_set = new Set();
   var displayed_edges_set = new Set();
-  var added_nodes_arr = new Array();
-  var added_edges_arr = new Array();
 
+  var added_eles = {'nodes': [], 'edges': []};
 
   var n0=744;
   displayed_nodes_set.add(n0);
@@ -135,7 +136,7 @@
         }),
 
     layout: {
-      name: 'grid',
+      name: 'circle',
       height: 100,
     },
 
@@ -143,16 +144,18 @@
   });
   cy.on('click', function(evt){
     console.info( 'node click ' + evt.target.id() );
-    jsonData('/graph', { "vx": parseInt(evt.target.id().slice(1)),"thr":123 })
+    var clicked_vx = parseInt(evt.target.id().slice(1));
+    jsonData('/graph', { "vx": clicked_vx,"thr":123 })
       .then(edges => {
-        added_edges_arr.length = 0;
-        added_nodes_arr.length = 0;
-        on_new_edges(edges);
         console.info("from server", edges); // JSON data parsed by `data.json()` call
-        //var subgraph = JSON.stringify(added_nodes_arr.concat(added_edges_arr));
-        var subgraph = added_nodes_arr.concat(added_edges_arr);
-        console.info("adding to graph", subgraph);
-        cy.add(subgraph);
+        added_eles = {'nodes': [], 'edges': []};
+        on_new_edges(edges, clicked_vx);
+        console.info("adding to graph", added_eles);
+        cy.add(added_eles);
+        //TODO run layout on collection of new elements
+        var new_eles = cy.filter('[clicked='+clicked_vx+']');
+        var lt = new_eles.layout({ name: 'circle' });
+        lt.run();
         cy.fit();
       });
   });
