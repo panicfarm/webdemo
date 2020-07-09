@@ -17,118 +17,135 @@
   <script>
     //TODO make it a separate module
 
-    async function jsonData(url = '', data = {}) {
-      // Default options are marked with *
-      const response = await fetch(url, {
-        method: 'POST', // *GET, POST, PUT, DELETE, etc.
-        mode: 'same-origin', // no-cors, *cors, same-origin
-        cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
-        credentials: 'same-origin', // include, *same-origin, omit
-        headers: {
-          'Content-Type': 'application/json'
-          // 'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: JSON.stringify(data) // body data type must match "Content-Type" header
-      });
-      return response.json(); // parses JSON response into native JavaScript objects
-    }
+    class GraphClicker {
 
-    function to_cy_edge(api_edge, clicked_vx) {
-      //TODO webworker and/or WASM
-      var cy_edge = new Object();
-      cy_edge.group = "edges";
-      var edge_data = new Object();
-      edge_data.id = "e"+api_edge[0];
-      edge_data.source = "n"+api_edge[1].orig_vx;
-      edge_data.target = "n"+api_edge[1].dest_vx;
-      edge_data.clicked = clicked_vx;
-      cy_edge.data = edge_data;
-      return cy_edge;
-    }
+      constructor(vx0) {
+        //initial vx
+        this.vx0 = vx0;
+        //displayed subgraph 
+        this.displayed_nodes_set = new Set();
+        this.displayed_edges_set = new Set();
 
-    function to_cy_node(id, clicked_vx) {
-      var cy_node = new Object();
-      cy_node.group = "nodes";
-      var node_data = new Object();
-      node_data.id = "n"+id;
-      node_data.clicked = clicked_vx;
-      cy_node.data = node_data;
-      return cy_node;
-    }
+        this.reset_added();
+        this.displayed_nodes_set.add(vx0);
 
-
-    function on_new_edges(api_edges, clicked_vx) {
-      api_edges.forEach( api_edge => {
-        if (!displayed_nodes_set.has(api_edge[1].orig_vx)) {
-          //add node
-          added_eles['nodes'].push(to_cy_node(api_edge[1].orig_vx, clicked_vx));
-          displayed_nodes_set.add(api_edge[1].orig_vx);
-        }
-        if (!displayed_nodes_set.has(api_edge[1].dest_vx)) { 
-          //add node
-          added_eles['nodes'].push(to_cy_node(api_edge[1].dest_vx, clicked_vx));
-          displayed_nodes_set.add(api_edge[1].dest_vx);
-        }
-        if (!displayed_edges_set.has(api_edge[0])) {
-          //add edge
-          added_eles['edges'].push(to_cy_edge(api_edge, clicked_vx));
-          displayed_edges_set.add(api_edge[0]);
-        }
+        //this function will be called from an event handler
+        //therefore it needs to be bound to the class instance
+        //otherwise, "this" will be the outer context of the handler
+        //https://stackoverflow.com/questions/20279484/how-to-access-the-correct-this-inside-a-callback
+        this.on_graph_click = this.on_graph_click.bind(this);
       }
-      )
-    }
 
-    function on_graph_click(evt) {
-      var el_type;
-      if (evt.target['elements']) {
-        el_type = 'g';
-        //TODO clicked on graph bg
-        console.log(`TODO reset the graph?`);
-      } else {
-        console.info( `graph click ${evt.target.id()}` );
-        var target_el_id = evt.target.id();
-        el_type = target_el_id.charAt(0);
-        var target_id = parseInt(target_el_id.slice(1));
-        switch (el_type) {
-          case 'n':
-            on_vx_click(target_id);
-            break;
-          case 'e':
-            on_edge_click(target_id);
-            break;
-        }
-      }
-    }
-
-    function on_vx_click(clicked_vx) {
-      jsonData('/graph', { "vx": clicked_vx,"thr":123 })
-        .then(edges => {
-          console.info("from server", edges); // JSON data parsed by `data.json()` call
-          added_eles = {'nodes': [], 'edges': []};
-          on_new_edges(edges, clicked_vx);
-          console.info("adding to graph", added_eles);
-          cy.add(added_eles);
-          //TODO run layout on collection of new elements
-          var new_eles = cy.filter(`[clicked=${clicked_vx}]`);
-          var lt = new_eles.layout({ name: 'circle' });
-          lt.run();
-          cy.fit();
+      async jsonData(url = '', data = {}) {
+        // Default options are marked with *
+        const response = await fetch(url, {
+          method: 'POST', // *GET, POST, PUT, DELETE, etc.
+          mode: 'same-origin', // no-cors, *cors, same-origin
+          cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+          credentials: 'same-origin', // include, *same-origin, omit
+          headers: {
+            'Content-Type': 'application/json'
+            // 'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: JSON.stringify(data) // body data type must match "Content-Type" header
         });
-    }
-    function on_edge_click(edge_id) {
-      console.log("TODO impl edge click");
-    }
+        return response.json(); // parses JSON response into native JavaScript objects
+      }
 
-    function start(n) {
-      var node = to_cy_node(n);
-      cy.add(node);
-      cy.fit();
-      displayed_nodes_set.add(n);
+      to_cy_edge(api_edge, clicked_vx) {
+        //TODO webworker and/or WASM
+        var cy_edge = new Object();
+        cy_edge.group = "edges";
+        var edge_data = new Object();
+        edge_data.id = "e"+api_edge[0];
+        edge_data.source = "n"+api_edge[1].orig_vx;
+        edge_data.target = "n"+api_edge[1].dest_vx;
+        edge_data.clicked = clicked_vx;
+        cy_edge.data = edge_data;
+        return cy_edge;
+      }
+
+      to_cy_node(id, clicked_vx) {
+        var cy_node = new Object();
+        cy_node.group = "nodes";
+        var node_data = new Object();
+        node_data.id = "n"+id;
+        node_data.clicked = clicked_vx;
+        cy_node.data = node_data;
+        return cy_node;
+      }
+
+
+      on_new_edges(api_edges, clicked_vx) {
+        api_edges.forEach( api_edge => {
+          if (!this.displayed_nodes_set.has(api_edge[1].orig_vx)) {
+            //add node
+            this.added_eles['nodes'].push(this.to_cy_node(api_edge[1].orig_vx, clicked_vx));
+            this.displayed_nodes_set.add(api_edge[1].orig_vx);
+          }
+          if (!this.displayed_nodes_set.has(api_edge[1].dest_vx)) { 
+            //add node
+            this.added_eles['nodes'].push(this.to_cy_node(api_edge[1].dest_vx, clicked_vx));
+            this.displayed_nodes_set.add(api_edge[1].dest_vx);
+          }
+          if (!this.displayed_edges_set.has(api_edge[0])) {
+            //add edge
+            this.added_eles['edges'].push(this.to_cy_edge(api_edge, clicked_vx));
+            this.displayed_edges_set.add(api_edge[0]);
+          }
+        }
+        )
+      }
+
+      on_graph_click(evt) {
+        var el_type;
+        if (evt.target['elements']) {
+          el_type = 'g';
+          //TODO clicked on graph bg
+          console.log(`TODO reset the graph?`);
+        } else {
+          console.info( `graph click ${evt.target.id()}` );
+          var target_el_id = evt.target.id();
+          el_type = target_el_id.charAt(0);
+          var target_id = parseInt(target_el_id.slice(1));
+          switch (el_type) {
+            case 'n':
+              this.on_vx_click(target_id);
+              break;
+            case 'e':
+              this.on_edge_click(target_id);
+              break;
+          }
+        }
+      }
+
+      on_vx_click(clicked_vx) {
+        this.jsonData('/graph', { "vx": clicked_vx,"thr":123 })
+          .then(edges => {
+            console.info("from server", edges); // JSON data parsed by `data.json()` call
+            this.reset_added();
+            this.on_new_edges(edges, clicked_vx);
+            console.info("adding to graph", this.added_eles);
+            cy.add(this.added_eles);
+            //TODO run layout on collection of new elements
+            var new_eles = cy.filter(`[clicked=${clicked_vx}]`);
+            var lt = new_eles.layout({ name: 'circle' });
+            lt.run();
+            cy.fit();
+          });
+      }
+
+      on_edge_click(edge_id) {
+        console.log("TODO impl edge click");
+      }
+
+      reset_added() {
+        this.added_eles = {'nodes': [], 'edges': []};
+      }
+
     }
   </script>
 
-<!-- For loading external data files -->
-<script src="https://cdn.polyfill.io/v2/polyfill.min.js?features=Promise,fetch"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.15.1/cytoscape.min.js"></script>
 <title>GraphData Demo</title>
@@ -138,13 +155,8 @@
 <!-- Load application code at the end to ensure DOM is loaded -->
 <script>
 
-  var displayed_nodes_set = new Set();
-  var displayed_edges_set = new Set();
-
-  var added_eles = {'nodes': [], 'edges': []};
-
-  var n0=744;
-  displayed_nodes_set.add(n0);
+  var n0 = 744;
+  var clicker = new GraphClicker(n0);
 
   var cy = window.cy = cytoscape({
     // these options hide parts of the graph during interaction
@@ -183,9 +195,9 @@
       height: 100,
     },
 
-    elements: to_cy_node(n0)  
+    elements: clicker.to_cy_node(n0)  
   });
-  cy.on('click', on_graph_click);
+  cy.on('tapstart', clicker.on_graph_click);
 
   cy.on('mouseover', function(evt){
     if (evt.target.hasOwnProperty('id')) {
