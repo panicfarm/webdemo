@@ -59,11 +59,11 @@
         var cy_edge = new Object();
         cy_edge.group = "edges";
         var edge_data = new Object();
-        edge_data.id = "e"+api_edge[0];
-        edge_data.source = "n"+api_edge[1].orig_vx;
-        edge_data.target = "n"+api_edge[1].dest_vx;
+        edge_data.id = "e"+api_edge.id;
+        edge_data.source = "n"+api_edge.orig_vx;
+        edge_data.target = "n"+api_edge.dest_vx;
         edge_data.clicked = clicked_vx;
-        edge_data.value = api_edge[1].value;
+        edge_data.value = api_edge.value;
         cy_edge.data = edge_data;
         return cy_edge;
       }
@@ -81,17 +81,17 @@
 
       on_new_edges(api_edges, clicked_vx) {
         api_edges.forEach( api_edge => {
-          if (!this.displayed_nodes_set.has(api_edge[1].orig_vx)) {
+          if (!this.displayed_nodes_set.has(api_edge.orig_vx)) {
             //add node
-            this.added_eles['nodes'].push(this.to_cy_node(api_edge[1].orig_vx, clicked_vx));
-            this.displayed_nodes_set.add(api_edge[1].orig_vx);
+            this.added_eles['nodes'].push(this.to_cy_node(api_edge.orig_vx, clicked_vx));
+            this.displayed_nodes_set.add(api_edge.orig_vx);
           }
-          if (!this.displayed_nodes_set.has(api_edge[1].dest_vx)) { 
+          if (!this.displayed_nodes_set.has(api_edge.dest_vx)) { 
             //add node
-            this.added_eles['nodes'].push(this.to_cy_node(api_edge[1].dest_vx, clicked_vx));
-            this.displayed_nodes_set.add(api_edge[1].dest_vx);
+            this.added_eles['nodes'].push(this.to_cy_node(api_edge.dest_vx, clicked_vx));
+            this.displayed_nodes_set.add(api_edge.dest_vx);
           }
-          if (!this.displayed_edges_set.has(api_edge[0])) {
+          if (!this.displayed_edges_set.has(api_edge.id)) {
             //add edge
             this.added_eles['edges'].push(this.to_cy_edge(api_edge, clicked_vx));
             this.displayed_edges_set.add(api_edge[0]);
@@ -156,7 +156,7 @@
       }
 
       on_vx_click(clicked_vx) {
-        this.jsonData('/graph', { "vx": clicked_vx,"thr":123 })
+        this.jsonData('/graph', { "vx_vec": [clicked_vx], "bl_min" : 0, "bl_max": 100000, "flux_threshold": 0 })
           .then(edges => {
             console.info("from server", edges); // JSON data parsed by `data.json()` call
             this.reset_added();

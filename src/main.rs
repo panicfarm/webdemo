@@ -20,8 +20,14 @@ use {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct GraphReq {
-    vx: u32,
-    thr: u64,
+    /*
+      vx: u32,
+      thr: u64,
+    */
+    vx_vec: Vec<u32>,
+    bl_min: u32,
+    bl_max: u32,
+    flux_threshold: u64,
 }
 
 async fn serve_req(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
@@ -36,9 +42,21 @@ async fn serve_req(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 let dp = PathBuf::from(db_path);
                 let db = Db::new(&dp, 100_000_000_000, false).unwrap();
                 let graph = db.create_graph_adapter().unwrap();
-                let (mut in_edges, mut out_edges) = graph.vx_edges(graph_req.vx).unwrap();
-                in_edges.append(&mut out_edges);
-                serde_json::to_string(&in_edges).unwrap()
+                /*
+                                let (mut in_edges, mut out_edges) = graph.vx_edges(graph_req.vx).unwrap();
+                                in_edges.append(&mut out_edges);
+                                serde_json::to_string(&in_edges).unwrap()
+                */
+                let edges = graph
+                    .edges(
+                        graph_req.vx_vec,
+                        graph_req.bl_min,
+                        graph_req.bl_max,
+                        graph_req.flux_threshold,
+                        2,
+                    )
+                    .unwrap();
+                serde_json::to_string(&edges).unwrap()
             })
             .await
             .unwrap();
