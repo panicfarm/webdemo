@@ -29,6 +29,8 @@
         this.reset_added();
         this.displayed_nodes_set.add(vx0);
 
+        this.last_clicked_id = 0;
+
         //these function will be called from an event handlers
         //therefore they need to be bound to the class instance
         //otherwise, "this" will be the outer context of the handler
@@ -47,14 +49,13 @@
           credentials: 'same-origin', // include, *same-origin, omit
           headers: {
             'Content-Type': 'application/json'
-            // 'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: JSON.stringify(data) // body data type must match "Content-Type" header
         });
         return response.json(); // parses JSON response into native JavaScript objects
       }
 
-      to_cy_edge(api_edge, clicked_vx) {
+      to_cy_edge(api_edge) {
         //TODO webworker and/or WASM
         var cy_edge = new Object();
         cy_edge.group = "edges";
@@ -62,38 +63,39 @@
         edge_data.id = "e"+api_edge.id;
         edge_data.source = "n"+api_edge.orig_vx;
         edge_data.target = "n"+api_edge.dest_vx;
-        edge_data.clicked = clicked_vx;
+        edge_data.clicked = this.last_clicked_id;
         edge_data.value = api_edge.value;
+        edge_data.bl_height = api_edge.bl_height;
         cy_edge.data = edge_data;
         return cy_edge;
       }
 
-      to_cy_node(id, clicked_vx) {
+      to_cy_node(id) {
         var cy_node = new Object();
         cy_node.group = "nodes";
         var node_data = new Object();
         node_data.id = "n"+id;
-        node_data.clicked = clicked_vx;
+        node_data.clicked = this.last_clicked_id;
         cy_node.data = node_data;
         return cy_node;
       }
 
 
-      on_new_edges(api_edges, clicked_vx) {
+      on_new_edges(api_edges) {
         api_edges.forEach( api_edge => {
           if (!this.displayed_nodes_set.has(api_edge.orig_vx)) {
             //add node
-            this.added_eles['nodes'].push(this.to_cy_node(api_edge.orig_vx, clicked_vx));
+            this.added_eles['nodes'].push(this.to_cy_node(api_edge.orig_vx));
             this.displayed_nodes_set.add(api_edge.orig_vx);
           }
           if (!this.displayed_nodes_set.has(api_edge.dest_vx)) { 
             //add node
-            this.added_eles['nodes'].push(this.to_cy_node(api_edge.dest_vx, clicked_vx));
+            this.added_eles['nodes'].push(this.to_cy_node(api_edge.dest_vx));
             this.displayed_nodes_set.add(api_edge.dest_vx);
           }
           if (!this.displayed_edges_set.has(api_edge.id)) {
             //add edge
-            this.added_eles['edges'].push(this.to_cy_edge(api_edge, clicked_vx));
+            this.added_eles['edges'].push(this.to_cy_edge(api_edge));
             this.displayed_edges_set.add(api_edge[0]);
           }
         }
@@ -110,17 +112,18 @@
           console.info( `graph click ${evt.target.id()}` );
           var target_el_id = evt.target.id();
           el_type = target_el_id.charAt(0);
-          var target_id = parseInt(target_el_id.slice(1));
+          this.last_clicked_id = parseInt(target_el_id.slice(1));
           switch (el_type) {
             case 'n':
-              this.on_vx_click(target_id);
+              this.on_vx_click();
               break;
             case 'e':
-              this.on_edge_click(target_id);
+              this.on_edge_click();
               break;
           }
         }
       }
+
       on_mouseover(evt) {
         if (evt.target['id']) {
           //I add styles here for performance reasons. Check this.
@@ -141,7 +144,7 @@
       }
 
       on_edge_mouseover(edge) {
-        edge.style('label', `${edge.data('value')/1e8}`);
+        edge.style('label', `${edge.data('value')/1e8}BTC at ${edge.data('bl_height')}`);
       }
 
       on_node_mouseover(node) {
@@ -155,23 +158,23 @@
         }
       }
 
-      on_vx_click(clicked_vx) {
-        this.jsonData('/graph', { "vx_vec": [clicked_vx], "bl_min" : 0, "bl_max": 100000, "flux_threshold": 0 })
+      on_vx_click() {
+        this.jsonData('/graph', { "vx_vec": [this.last_clicked_id], "bl_min" : 0, "bl_max": 100000, "flux_threshold": 0 })
           .then(edges => {
             console.info("from server", edges); // JSON data parsed by `data.json()` call
             this.reset_added();
-            this.on_new_edges(edges, clicked_vx);
+            this.on_new_edges(edges);
             console.info("adding to graph", this.added_eles);
             cy.add(this.added_eles);
             //TODO run layout on collection of new elements
-            var new_eles = cy.filter(`[clicked=${clicked_vx}]`);
+            var new_eles = cy.filter(`[clicked=${this.last_clicked_id}]`);
             var lt = new_eles.layout({ name: 'circle' });
             lt.run();
             cy.fit();
           });
       }
 
-      on_edge_click(edge_id) {
+      on_edge_click() {
         console.log("TODO impl edge click");
       }
 
