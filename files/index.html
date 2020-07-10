@@ -3,7 +3,7 @@
   <meta charset=utf-8 />
   <style>
     body { 
-      font: 14px helvetica neue, helvetica, arial, sans-serif;
+      font: 8px helvetica neue, helvetica, arial, sans-serif;
     } 
 
     #cy {
@@ -29,11 +29,13 @@
         this.reset_added();
         this.displayed_nodes_set.add(vx0);
 
-        //this function will be called from an event handler
-        //therefore it needs to be bound to the class instance
+        //these function will be called from an event handlers
+        //therefore they need to be bound to the class instance
         //otherwise, "this" will be the outer context of the handler
         //https://stackoverflow.com/questions/20279484/how-to-access-the-correct-this-inside-a-callback
         this.on_graph_click = this.on_graph_click.bind(this);
+        this.on_mouseover = this.on_mouseover.bind(this);
+        this.on_mouseout = this.on_mouseout.bind(this);
       }
 
       async jsonData(url = '', data = {}) {
@@ -61,6 +63,7 @@
         edge_data.source = "n"+api_edge[1].orig_vx;
         edge_data.target = "n"+api_edge[1].dest_vx;
         edge_data.clicked = clicked_vx;
+        edge_data.value = api_edge[1].value;
         cy_edge.data = edge_data;
         return cy_edge;
       }
@@ -118,6 +121,39 @@
           }
         }
       }
+      on_mouseover(evt) {
+        if (evt.target['id']) {
+          //I add styles here for performance reasons. Check this.
+          console.info( 'mouse over ' + evt.target.id() );
+          evt.target.style('font-size', '6px');
+          evt.target.style('text-valign', 'center');
+          var target_el_id = evt.target.id();
+          let el_type = target_el_id.charAt(0);
+          switch (el_type) {
+            case 'n':
+              this.on_node_mouseover(evt.target);
+              break;
+            case 'e':
+              this.on_edge_mouseover(evt.target);
+              break;
+          }
+        }
+      }
+
+      on_edge_mouseover(edge) {
+        edge.style('label', `${edge.data('value')/1e8}`);
+      }
+
+      on_node_mouseover(node) {
+        node.style('label', `${node.id()}`);
+      }
+
+      on_mouseout(evt) {
+        if (evt.target['id']) {
+          console.info( 'mouse out ' + evt.target.id() );
+          evt.target.style('label', '');
+        }
+      }
 
       on_vx_click(clicked_vx) {
         this.jsonData('/graph', { "vx": clicked_vx,"thr":123 })
@@ -170,7 +206,7 @@
     // pixelRatio: 1,
 
     // a motion blur effect that increases perceived performance for little or no cost
-    // motionBlur: true,
+    motionBlur: true,
 
     container: document.getElementById('cy'),
 
@@ -197,13 +233,10 @@
 
     elements: clicker.to_cy_node(n0)  
   });
+  //event handlers
   cy.on('tapstart', clicker.on_graph_click);
-
-  cy.on('mouseover', function(evt){
-    if (evt.target.hasOwnProperty('id')) {
-      console.info( 'mouse over ' + evt.target.id() );
-    }
-  });
+  cy.on('mouseover', clicker.on_mouseover);
+  cy.on('mouseout', clicker.on_mouseout);
 
   
  
