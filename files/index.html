@@ -30,14 +30,16 @@
         this.displayed_nodes_set.add(vx0);
 
         this.last_clicked_id = 0;
+        this.last_clicked_layout = 'random';
 
-        //these function will be called from an event handlers
+        //these functions will be called from the event handlers
         //therefore they need to be bound to the class instance
         //otherwise, "this" will be the outer context of the handler
         //https://stackoverflow.com/questions/20279484/how-to-access-the-correct-this-inside-a-callback
         this.on_graph_click = this.on_graph_click.bind(this);
         this.on_mouseover = this.on_mouseover.bind(this);
         this.on_mouseout = this.on_mouseout.bind(this);
+        this.on_rightclick = this.on_rightclick.bind(this);
       }
 
       async jsonData(url = '', data = {}) {
@@ -96,7 +98,7 @@
           if (!this.displayed_edges_set.has(api_edge.id)) {
             //add edge
             this.added_eles['edges'].push(this.to_cy_edge(api_edge));
-            this.displayed_edges_set.add(api_edge[0]);
+            this.displayed_edges_set.add(api_edge.id);
           }
         }
         )
@@ -144,7 +146,8 @@
       }
 
       on_edge_mouseover(edge) {
-        edge.style('label', `${edge.data('value')/1e8}BTC at ${edge.data('bl_height')}`);
+        edge.style('label', `${edge.data('value')/1e8}BTC at ${edge.data('bl_height')} fr ${edge.data('source')} to ${edge.data('target')}`);
+        edge.style('width', 3*0.5);
       }
 
       on_node_mouseover(node) {
@@ -153,9 +156,24 @@
 
       on_mouseout(evt) {
         if (evt.target['id']) {
-          console.info( 'mouse out ' + evt.target.id() );
+          var target_el_id = evt.target.id();
+          let el_type = target_el_id.charAt(0);
+          console.info( 'mouse out ' + target_el_id );
           evt.target.style('label', '');
+          switch (el_type) {
+            case 'n':
+              break;
+            case 'e':
+              evt.target.style('width', 0.5);
+              break;
+          }
         }
+      }
+
+      on_rightclick(evt) {
+        console.info( 'right click ' + evt.target );
+        //TODO remove from display_nodes and displayed_edges, make last_clicked_id into stack
+        evt.cy.remove(evt.cy.filter(`[clicked=${this.last_clicked_id}]`));
       }
 
       on_vx_click() {
@@ -166,9 +184,9 @@
             this.on_new_edges(edges);
             console.info("adding to graph", this.added_eles);
             cy.add(this.added_eles);
-            //TODO run layout on collection of new elements
+            //run layout only on collection of the newly added elements
             var new_eles = cy.filter(`[clicked=${this.last_clicked_id}]`);
-            var lt = new_eles.layout({ name: 'circle' });
+            var lt = new_eles.layout({ name: this.get_next_layout() });
             lt.run();
             cy.fit();
           });
@@ -182,6 +200,20 @@
         this.added_eles = {'nodes': [], 'edges': []};
       }
 
+      get_next_layout() {
+        //for performance we lay out only newly added eles ("collection")
+        //thus they can overlap with existing visible eles created on prior clicks
+        //thus i alternate random layout for newly added collections
+        switch (this.last_clicked_layout) {
+          case 'circle':
+            this.last_clicked_layout = 'random';
+            break;
+          case 'random':
+            this.last_clicked_layout = 'circle';
+            break;
+        }
+        return this.last_clicked_layout;
+      }
     }
   </script>
 
@@ -228,22 +260,20 @@
           'target-arrow-color': '#9dbaea',
           'target-arrow-shape': 'triangle-backcurve' 
         }),
-
+/*
     layout: {
-      name: 'circle',
+      name: 'grid',
       height: 100,
     },
-
+*/
     elements: clicker.to_cy_node(n0)  
   });
   //event handlers
   cy.on('tapstart', clicker.on_graph_click);
   cy.on('mouseover', clicker.on_mouseover);
   cy.on('mouseout', clicker.on_mouseout);
+  cy.on('cxttapstart', clicker.on_rightclick);
 
-  
- 
-  
 </script>
 </body>
 </html>
