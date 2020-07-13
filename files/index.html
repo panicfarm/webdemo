@@ -29,7 +29,7 @@
         this.reset_added();
         this.displayed_nodes_set.add(vx0);
 
-        this.last_clicked_id = 0;
+        this.last_clicked_id = new Array();
         this.last_clicked_layout = 'random';
 
         //these functions will be called from the event handlers
@@ -65,7 +65,7 @@
         edge_data.id = "e"+api_edge.id;
         edge_data.source = "n"+api_edge.orig_vx;
         edge_data.target = "n"+api_edge.dest_vx;
-        edge_data.clicked = this.last_clicked_id;
+        edge_data.clicked = this.last_clicked_id[this.last_clicked_id.length-1];
         edge_data.value = api_edge.value;
         edge_data.bl_height = api_edge.bl_height;
         cy_edge.data = edge_data;
@@ -77,7 +77,7 @@
         cy_node.group = "nodes";
         var node_data = new Object();
         node_data.id = "n"+id;
-        node_data.clicked = this.last_clicked_id;
+        node_data.clicked = this.last_clicked_id[this.last_clicked_id.length-1];
         cy_node.data = node_data;
         return cy_node;
       }
@@ -114,7 +114,7 @@
           console.info( `graph click ${evt.target.id()}` );
           var target_el_id = evt.target.id();
           el_type = target_el_id.charAt(0);
-          this.last_clicked_id = parseInt(target_el_id.slice(1));
+          this.last_clicked_id.push(parseInt(target_el_id.slice(1)));
           switch (el_type) {
             case 'n':
               this.on_vx_click();
@@ -172,12 +172,20 @@
 
       on_rightclick(evt) {
         console.info( 'right click ' + evt.target );
-        //TODO remove from display_nodes and displayed_edges, make last_clicked_id into stack
-        evt.cy.remove(evt.cy.filter(`[clicked=${this.last_clicked_id}]`));
+        let last_clicked_id = this.last_clicked_id.pop()
+        let last_added_eles = evt.cy.filter(`[clicked=${last_clicked_id}]`);
+        evt.cy.remove(last_added_eles);
+        //remove from display_nodes and displayed_edges, make last_clicked_id into stack
+        last_added_eles.edges().forEach( edge => this.displayed_edges_set.delete(
+          parseInt(edge.id().slice(1))));
+        last_added_eles.nodes().forEach( node => this.displayed_nodes_set.delete(
+          parseInt(node.id().slice(1))));
       }
 
       on_vx_click() {
-        this.jsonData('/graph', { "vx_vec": [this.last_clicked_id], "bl_min" : 0, "bl_max": 100000, "flux_threshold": 0 })
+        //TODO block any click events untill we get a server response
+        let last_clicked_id = this.last_clicked_id[this.last_clicked_id.length-1];
+        this.jsonData('/graph', { "vx_vec": [last_clicked_id], "bl_min" : 0, "bl_max": 100000, "flux_threshold": 0 })
           .then(edges => {
             console.info("from server", edges); // JSON data parsed by `data.json()` call
             this.reset_added();
@@ -185,7 +193,7 @@
             console.info("adding to graph", this.added_eles);
             cy.add(this.added_eles);
             //run layout only on collection of the newly added elements
-            var new_eles = cy.filter(`[clicked=${this.last_clicked_id}]`);
+            var new_eles = cy.filter(`[clicked=${last_clicked_id}]`);
             var lt = new_eles.layout({ name: this.get_next_layout() });
             lt.run();
             cy.fit();
