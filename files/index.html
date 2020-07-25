@@ -17,6 +17,8 @@
   <script>
     //TODO make it a separate module
 
+    const REWARD_VX = 2**32 - 1;
+
     class GraphClicker {
 
       constructor(vx0) {
@@ -59,7 +61,8 @@
 
         vx_vec.forEach( vx => this.added_eles['nodes'].push(this.to_cy_node(vx, true)) );
         cy.add(this.added_eles);
-        var lt = cy.layout({ name: 'grid' });
+        let lt = cy.layout({ name: 'concentric', 
+          concentric: function( node ){ return this.req_n; }});
         lt.run();
         cy.fit();
 
@@ -78,15 +81,29 @@
       }
 
       shift(direction, win=0) {
-        if (0 == win)
+        if (0 == win) {
           win = this.bl_max - this.bl_min;
+        }
+        else if (win != this.bl_max - this.bl_min) {
+          if (direction > 0)
+            this.bl_max = this.bl_min + win;
+          else
+            this.bl_min = this.bl_max - win;
+          if (win > this.bl_tip) 
+            win = this.bl_tip;
+        }
         win *= direction;
         this.bl_min += win;
         this.bl_max += win;
-        if (this.bl_min < 0) this.bl_min = 0;
-        if (this.bl_max < 0) this.bl_max = 0;
-        if (this.bl_min > this.bl_tip) this.bl_min = this.bl_tip;
-        if (this.bl_max > this.bl_tip) this.bl_max = this.bl_tip;
+        if (this.bl_min < 0) { 
+          this.bl_min = 0; 
+          this.bl_max = Math.abs(win); 
+        }
+        if (this.bl_max > this.bl_tip) { 
+          this.bl_max = this.bl_tip; 
+          this.bl_min = this.bl_max - Math.abs(win); 
+        }
+
         cy.remove(cy.edges());
         cy.remove(cy.filter('[!base]'));
         let vx_base_vec = [];
@@ -94,12 +111,23 @@
         this.get_and_plot(vx_base_vec);
       }
 
-      add_vxs([vx_vec]) {
-        //TODO don't change vx positions, don't erase anything, fetch edges
+      add_vxs(vx_vec) {
+        // don't change vx positions, don't erase anything, fetch edges
+        this.get_and_plot(vx_vec);
+        vx_vec.forEach( vx => {
+          let id = `n${vx}`;
+          let el = cy.getElementById(id);
+          if (el.length > 0) //TODO: for some reason the first time a vx is added, it's not found right away in cy; as if some sleep is needed
+            el.data().base = true
+        });
       }
 
-      remove_vxs([vx_vec]) {
-        //TODO don't change vx positions, don't erase anything, remove vxs and associated edges
+      remove_vxs(vx_vec) {
+        // don't change vx positions, don't erase anything, remove vxs and associated edges
+        vx_vec.forEach( vx => {
+          let id = `n${vx}`;
+          cy.remove(cy.filter(`[id="${id}"]`));
+        });
       }
 
       async jsonData(url = '', data = {}) {
@@ -122,9 +150,9 @@
         var cy_edge = new Object();
         cy_edge.group = "edges";
         var edge_data = new Object();
-        edge_data.id = "e"+api_edge.id;
-        edge_data.source = "n"+api_edge.orig_vx;
-        edge_data.target = "n"+api_edge.dest_vx;
+        edge_data.id = `e${api_edge.id}`;
+        edge_data.source = `n${api_edge.orig_vx}`;
+        edge_data.target = `n${api_edge.dest_vx}`;
         edge_data.req_n = this.req_n;
         edge_data.value = api_edge.value;
         edge_data.bl_height = api_edge.bl_height;
@@ -136,7 +164,7 @@
         var cy_node = new Object();
         cy_node.group = "nodes";
         var node_data = new Object();
-        node_data.id = "n"+id;
+        node_data.id = `n${id}`;
         node_data.req_n = this.req_n;
         if (base) node_data.base = true;
         cy_node.data = node_data;
@@ -171,7 +199,10 @@
           console.info( `graph click ${evt.target.id()}` );
           var target_el_id = evt.target.id();
           el_type = target_el_id.charAt(0);
-          this.last_clicked_id = parseInt(target_el_id.slice(1));
+          let el_id = parseInt(target_el_id.slice(1));
+          if (REWARD_VX == el_id)
+            return;
+          this.last_clicked_id = el_id;
           switch (el_type) {
             case 'n':
               this.on_vx_click();
@@ -189,7 +220,7 @@
           console.debug( 'mouse over ' + evt.target.id() );
           evt.target.style('font-size', '6px');
           evt.target.style('text-valign', 'center');
-          var target_el_id = evt.target.id();
+          let target_el_id = evt.target.id();
           let el_type = target_el_id.charAt(0);
           switch (el_type) {
             case 'n':
@@ -236,6 +267,7 @@
 
       on_vx_click() {
         //TODO block any click events untill we get a server response
+        cy.getElementById(`n${this.last_clicked_id}`).data().base = true;
         this.get_and_plot([this.last_clicked_id])
       }
 
@@ -280,10 +312,13 @@
             console.info("adding to graph", this.added_eles);
             cy.add(this.added_eles);
             //run layout only on collection of the newly added elements
-            var new_eles = cy.filter(`[req_n=${this.req_n++}]`);
-            var lt = new_eles.layout({ name: this.get_next_layout() });
+            let new_eles = cy.filter(`[req_n=${this.req_n}]`);
+            let lt = new_eles.layout({ name: 'concentric', 
+              concentric: function( node ){ return this.req_n; }
+            });
             lt.run();
             cy.fit();
+            this.req_n++;
           });
       }
     }
@@ -326,18 +361,13 @@
         })
       .selector('edge')
         .css({
-          'width': 0.5,
+          'width': "0.5",
           'curve-style' : 'bezier',
           'line-color' : '#9dbaea',
           'target-arrow-color': '#9dbaea',
           'target-arrow-shape': 'triangle-backcurve' 
         }),
-/*
-    layout: {
-      name: 'grid',
-      height: 100,
-    },
-*/
+
     elements: clicker.to_cy_node(n0, true)  
   });
   clicker.req_n++;
