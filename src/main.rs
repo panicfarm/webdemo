@@ -59,7 +59,7 @@ async fn serve_req(req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     }
 }
 
-async fn run_server(addr: SocketAddr) {
+async fn run_server(addr: SocketAddr, x: u8) {
     println!("Listening on http://{}", addr);
 
     // Create a server bound on the provided address
@@ -72,7 +72,7 @@ async fn run_server(addr: SocketAddr) {
         // converts a request-response function into a type that implements
         // the `Service` trait.
         .serve(make_service_fn(|socket: &AddrStream| {
-            println!("{}", socket.remote_addr());
+            println!("{} {}", socket.remote_addr(), x);
             async { Ok::<_, hyper::Error>(service_fn(serve_req)) }
         }));
 
@@ -87,9 +87,10 @@ async fn run_server(addr: SocketAddr) {
 async fn main() {
     // Set the address to run our socket on.
     let addr = SocketAddr::from(([208, 93, 231, 240], 3000));
+    let x = 3;
 
     // Call our `run_server` function, which returns a future.
     // As with every `async fn`, for `run_server` to do anything,
     // the returned future needs to be run using `await`;
-    run_server(addr).await;
+    run_server(addr, x).await;
 }

@@ -20,16 +20,18 @@
     class GraphClicker {
 
       constructor(vx0) {
-        //initial vx
+        //search parameters
         this.vx0 = vx0;
+        this.bl_tip = 100000;
+        this.bl_min = 0;
+        this.bl_max = this.bl_tip;
+        this.flux_thr = 0;
         //displayed subgraph 
-        this.displayed_nodes_set = new Set();
-        this.displayed_edges_set = new Set();
 
         this.reset_added();
-        this.displayed_nodes_set.add(vx0);
 
-        this.last_clicked_id = new Array();
+        this.req_n = 0;
+        this.last_clicked_id = 0;
         this.last_clicked_layout = 'random';
 
         //these functions will be called from the event handlers
@@ -40,6 +42,64 @@
         this.on_mouseover = this.on_mouseover.bind(this);
         this.on_mouseout = this.on_mouseout.bind(this);
         this.on_rightclick = this.on_rightclick.bind(this);
+      }
+
+      start(vx_vec, bl_min, bl_max, flux_thr=0, reward_vx=true, 
+        only_specified_vxs=false, aggr_parallel_edges=false, aggr_flux_thr=0) {
+        this.req_n = 0;
+        this.last_clicked_id = 0;
+        this.bl_min = bl_min;
+        this.bl_max = bl_max;
+        this.flux_thr = flux_thr;
+
+        //TODO display bl_min and bl_max on the screen dashboard
+        cy.remove(cy.elements());
+        this.reset_added();
+        this.last_clicked_layout = 'random';
+
+        vx_vec.forEach( vx => this.added_eles['nodes'].push(this.to_cy_node(vx, true)) );
+        cy.add(this.added_eles);
+        var lt = cy.layout({ name: 'grid' });
+        lt.run();
+        cy.fit();
+
+        this.req_n++;
+        this.get_and_plot(vx_vec);
+      }
+
+      back(win=0) {
+        // preserve vx positions, move back in time
+        this.shift(-1, win)
+      }  
+      
+      forward(win=0) {
+        // preserve vx positions, move back in time
+        this.shift(+1, win)
+      }
+
+      shift(direction, win=0) {
+        if (0 == win)
+          win = this.bl_max - this.bl_min;
+        win *= direction;
+        this.bl_min += win;
+        this.bl_max += win;
+        if (this.bl_min < 0) this.bl_min = 0;
+        if (this.bl_max < 0) this.bl_max = 0;
+        if (this.bl_min > this.bl_tip) this.bl_min = this.bl_tip;
+        if (this.bl_max > this.bl_tip) this.bl_max = this.bl_tip;
+        cy.remove(cy.edges());
+        cy.remove(cy.filter('[!base]'));
+        let vx_base_vec = [];
+        cy.nodes().forEach( vx => vx_base_vec.push(parseInt(vx.id().slice(1))) );
+        this.get_and_plot(vx_base_vec);
+      }
+
+      add_vxs([vx_vec]) {
+        //TODO don't change vx positions, don't erase anything, fetch edges
+      }
+
+      remove_vxs([vx_vec]) {
+        //TODO don't change vx positions, don't erase anything, remove vxs and associated edges
       }
 
       async jsonData(url = '', data = {}) {
@@ -65,19 +125,20 @@
         edge_data.id = "e"+api_edge.id;
         edge_data.source = "n"+api_edge.orig_vx;
         edge_data.target = "n"+api_edge.dest_vx;
-        edge_data.clicked = this.last_clicked_id[this.last_clicked_id.length-1];
+        edge_data.req_n = this.req_n;
         edge_data.value = api_edge.value;
         edge_data.bl_height = api_edge.bl_height;
         cy_edge.data = edge_data;
         return cy_edge;
       }
 
-      to_cy_node(id) {
+      to_cy_node(id, base=false) {
         var cy_node = new Object();
         cy_node.group = "nodes";
         var node_data = new Object();
         node_data.id = "n"+id;
-        node_data.clicked = this.last_clicked_id[this.last_clicked_id.length-1];
+        node_data.req_n = this.req_n;
+        if (base) node_data.base = true;
         cy_node.data = node_data;
         return cy_node;
       }
@@ -85,20 +146,17 @@
 
       on_new_edges(api_edges) {
         api_edges.forEach( api_edge => {
-          if (!this.displayed_nodes_set.has(api_edge.orig_vx)) {
+          if (!cy.hasElementWithId(`n${api_edge.orig_vx}`)) {
             //add node
             this.added_eles['nodes'].push(this.to_cy_node(api_edge.orig_vx));
-            this.displayed_nodes_set.add(api_edge.orig_vx);
           }
-          if (!this.displayed_nodes_set.has(api_edge.dest_vx)) { 
+          if (!cy.hasElementWithId(`n${api_edge.dest_vx}`)) { 
             //add node
             this.added_eles['nodes'].push(this.to_cy_node(api_edge.dest_vx));
-            this.displayed_nodes_set.add(api_edge.dest_vx);
           }
-          if (!this.displayed_edges_set.has(api_edge.id)) {
+          if (!cy.hasElementWithId(`e${api_edge.id}`)) {
             //add edge
             this.added_eles['edges'].push(this.to_cy_edge(api_edge));
-            this.displayed_edges_set.add(api_edge.id);
           }
         }
         )
@@ -108,13 +166,12 @@
         var el_type;
         if (evt.target['elements']) {
           el_type = 'g';
-          //TODO clicked on graph bg
-          console.log(`TODO reset the graph?`);
+          console.log(`TODO reset the graph size?`);
         } else {
           console.info( `graph click ${evt.target.id()}` );
           var target_el_id = evt.target.id();
           el_type = target_el_id.charAt(0);
-          this.last_clicked_id.push(parseInt(target_el_id.slice(1)));
+          this.last_clicked_id = parseInt(target_el_id.slice(1));
           switch (el_type) {
             case 'n':
               this.on_vx_click();
@@ -129,7 +186,7 @@
       on_mouseover(evt) {
         if (evt.target['id']) {
           //I add styles here for performance reasons. Check this.
-          console.info( 'mouse over ' + evt.target.id() );
+          console.debug( 'mouse over ' + evt.target.id() );
           evt.target.style('font-size', '6px');
           evt.target.style('text-valign', 'center');
           var target_el_id = evt.target.id();
@@ -146,7 +203,8 @@
       }
 
       on_edge_mouseover(edge) {
-        edge.style('label', `${edge.data('value')/1e8}BTC at ${edge.data('bl_height')} fr ${edge.data('source')} to ${edge.data('target')}`);
+        edge.style('label', 
+          `${edge.data('value')/1e8}BTC at ${edge.data('bl_height')} fr ${edge.data('source')} to ${edge.data('target')}`);
         edge.style('width', 3*0.5);
       }
 
@@ -158,7 +216,7 @@
         if (evt.target['id']) {
           var target_el_id = evt.target.id();
           let el_type = target_el_id.charAt(0);
-          console.info( 'mouse out ' + target_el_id );
+          console.debug( 'mouse out ' + target_el_id );
           evt.target.style('label', '');
           switch (el_type) {
             case 'n':
@@ -172,32 +230,13 @@
 
       on_rightclick(evt) {
         console.info( 'right click ' + evt.target );
-        let last_clicked_id = this.last_clicked_id.pop()
-        let last_added_eles = evt.cy.filter(`[clicked=${last_clicked_id}]`);
+        let last_added_eles = evt.cy.filter(`[req_n=${this.req_n--}]`);
         evt.cy.remove(last_added_eles);
-        //remove from display_nodes and displayed_edges, make last_clicked_id into stack
-        last_added_eles.edges().forEach( edge => this.displayed_edges_set.delete(
-          parseInt(edge.id().slice(1))));
-        last_added_eles.nodes().forEach( node => this.displayed_nodes_set.delete(
-          parseInt(node.id().slice(1))));
       }
 
       on_vx_click() {
         //TODO block any click events untill we get a server response
-        let last_clicked_id = this.last_clicked_id[this.last_clicked_id.length-1];
-        this.jsonData('/graph', { "vx_vec": [last_clicked_id], "bl_min" : 0, "bl_max": 100000, "flux_threshold": 0 })
-          .then(edges => {
-            console.info("from server", edges); // JSON data parsed by `data.json()` call
-            this.reset_added();
-            this.on_new_edges(edges);
-            console.info("adding to graph", this.added_eles);
-            cy.add(this.added_eles);
-            //run layout only on collection of the newly added elements
-            var new_eles = cy.filter(`[clicked=${last_clicked_id}]`);
-            var lt = new_eles.layout({ name: this.get_next_layout() });
-            lt.run();
-            cy.fit();
-          });
+        this.get_and_plot([this.last_clicked_id])
       }
 
       on_edge_click() {
@@ -221,6 +260,31 @@
             break;
         }
         return this.last_clicked_layout;
+      }
+
+      init_graph_req(vx_vec) {
+        let o = new Object();
+        o.vx_vec = vx_vec;
+        o.bl_min = this.bl_min;
+        o.bl_max = this.bl_max;
+        o.flux_threshold = this.flux_thr;
+        return o;
+      }
+
+      get_and_plot(vx_vec) {
+        this.jsonData('/graph', this.init_graph_req(vx_vec))
+          .then(edges => {
+            console.info("from server", edges); // JSON data parsed by `data.json()` call
+            this.reset_added();
+            this.on_new_edges(edges);
+            console.info("adding to graph", this.added_eles);
+            cy.add(this.added_eles);
+            //run layout only on collection of the newly added elements
+            var new_eles = cy.filter(`[req_n=${this.req_n++}]`);
+            var lt = new_eles.layout({ name: this.get_next_layout() });
+            lt.run();
+            cy.fit();
+          });
       }
     }
   </script>
@@ -274,8 +338,9 @@
       height: 100,
     },
 */
-    elements: clicker.to_cy_node(n0)  
+    elements: clicker.to_cy_node(n0, true)  
   });
+  clicker.req_n++;
   //event handlers
   cy.on('tapstart', clicker.on_graph_click);
   cy.on('mouseover', clicker.on_mouseover);
